@@ -70,7 +70,7 @@ import { request } from '@/api/client'
 type Row = Record<string, string | number | null>
 
 const ENDPOINT = '/api/shift'
-const columns = ["记录编号", "入井人员", "所属班组", "入井时间", "升井时间", "携带设备", "出勤区域", "入井状态"]
+const columns = ["记录编号", "入井人员", "所属班组", "入井时间", "升井时间", "携带设备", "出勤区域", "入井状态", "持证状态"]
 const actions = ["登记入井", "登记升井", "超时联系"]
 const statuses = ["入井中", "已升井", "超时未升", "已联系"]
 const stats = [{"label": "入井中人数", "value": 0}, {"label": "已升井人数", "value": 0}, {"label": "超时人数", "value": 0}]

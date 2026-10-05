@@ -19,9 +19,24 @@
     </div>
 
     <form class="filter-bar" @submit.prevent="reload">
-      <label v-for="field in filterFields" :key="field" class="filter-item">
-        <span>{{ field }}</span>
-        <input v-model="filters[field]" :placeholder="`按${field}检索`" />
+      <label class="filter-item">
+        <span>人员编号</span>
+        <input v-model="filters.keyword" placeholder="按人员编号检索" />
+      </label>
+      <label class="filter-item">
+        <span>证书类别</span>
+        <input v-model="filters.cert_category" placeholder="按证书类别检索" />
+      </label>
+      <label class="filter-item">
+        <span>到期月份</span>
+        <input v-model="filters.expiry_month" type="month" />
+      </label>
+      <label class="filter-item">
+        <span>证书状态</span>
+        <select v-model="filters.status">
+          <option value="">全部状态</option>
+          <option v-for="status in statuses" :key="status" :value="status">{{ status }}</option>
+        </select>
       </label>
       <button class="btn" type="submit">查询</button>
       <button class="btn ghost" type="button" @click="resetFilters">重置条件</button>
@@ -65,24 +80,27 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 
-import { request } from '@/api/client'
+import { fetchJson, request } from '@/api/client'
 
 type Row = Record<string, string | number | null>
 
 const ENDPOINT = '/api/certificate'
-const columns = ["人员编号", "姓名", "证书类别", "证书编号", "发证日期", "到期日期", "复训记录", "证书状态"]
-const actions = ["安排复训", "登记过期", "注销证书"]
+const columns = ["人员编号", "姓名", "证书类别", "证书编号", "发证日期", "到期日期", "剩余天数", "复训记录", "证书状态"]
+const actions = ["安排复训", "补录复训", "登记过期", "注销证书"]
 const statuses = ["持证有效", "即将到期", "已过期", "已注销"]
-const stats = [{"label": "持证人员", "value": 0}, {"label": "到期人员", "value": 0}, {"label": "过期人员", "value": 0}]
 
 const rows = ref<Row[]>([])
 const total = ref(0)
 const errorMessage = ref('')
-const filters = ref<Record<string, string>>({})
-const filterFields = columns.slice(0, 3)
+const stats = ref([{ label: '持证人员', value: 0 }, { label: '即将到期', value: 0 }, { label: '已过期', value: 0 }])
+const filters = ref<Record<string, string>>({ keyword: '', cert_category: '', expiry_month: '', status: '' })
+
+function activeFilters() {
+  return Object.fromEntries(Object.entries(filters.value).filter(([, value]) => value))
+}
 
 function resetFilters() {
-  filters.value = {}
+  filters.value = { keyword: '', cert_category: '', expiry_month: '', status: '' }
   void reload()
 }
 
@@ -96,15 +114,24 @@ function openCreate() {
 
 async function runAction(action: string, row: Row) {
   errorMessage.value = ''
+  const values: Record<string, string> = { action }
+  if (action === '补录复训') {
+    const trained = window.prompt('请输入复训日期（YYYY-MM-DD）')
+    if (!trained) {
+      return
+    }
+    values['复训日期'] = trained
+  }
   try {
     const response = await request(`${ENDPOINT}/${row.id}/actions`, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      body: JSON.stringify(values),
     })
-    if (!response.ok) {
-      throw new Error('持证管理动作未生效，请稍后重试')
+    const payload = await response.json()
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message ?? payload.detail ?? '持证管理动作未生效，请稍后重试')
     }
-    await reload()
+    await Promise.all([reload(), reloadStats()])
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '持证管理操作失败'
   }
@@ -112,7 +139,7 @@ async function runAction(action: string, row: Row) {
 
 async function reload() {
   errorMessage.value = ''
-  const query = new URLSearchParams(filters.value as Record<string, string>).toString()
+  const query = new URLSearchParams(activeFilters()).toString()
   try {
     const response = await request(`${ENDPOINT}?${query}`)
     if (!response.ok) {
@@ -126,5 +153,21 @@ async function reload() {
   }
 }
 
-onMounted(reload)
+async function reloadStats() {
+  try {
+    const payload = await fetchJson<{ total: number; counts: Record<string, number> }>(`${ENDPOINT}/summary`)
+    stats.value = [
+      { label: '持证人员', value: payload.total ?? 0 },
+      { label: '即将到期', value: payload.counts?.['即将到期'] ?? 0 },
+      { label: '已过期', value: payload.counts?.['已过期'] ?? 0 },
+    ]
+  } catch {
+    stats.value = [{ label: '持证人员', value: 0 }, { label: '即将到期', value: 0 }, { label: '已过期', value: 0 }]
+  }
+}
+
+onMounted(() => {
+  void reload()
+  void reloadStats()
+})
 </script>
