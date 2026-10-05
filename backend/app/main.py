@@ -5,14 +5,26 @@
 """
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import ROUTERS
+from app.services.certificate import CertificateService
 from app.store import store
 
-app = FastAPI(title="矿山安全监测管理平台", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """启动时把存量证书按发证日期回填到期日期，并同步一遍持证状态。"""
+    CertificateService().backfill_existing()
+    yield
+
+
+app = FastAPI(title="矿山安全监测管理平台", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

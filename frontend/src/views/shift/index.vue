@@ -3,7 +3,7 @@
     <header class="page-head">
       <div>
         <h2>入井管理管理</h2>
-        <p class="page-desc">维护入井记录，围绕记录编号、入井人员、所属班组、入井时间做登记、筛选与状态流转。</p>
+        <p class="page-desc">维护入井记录，围绕记录编号、入井人员、所属班组、入井时间做登记、筛选与状态流转，入井名单实时做持证校验。</p>
       </div>
       <div class="page-actions">
         <button class="btn primary" type="button" @click="openCreate">登记入井记录</button>
@@ -70,7 +70,7 @@ import { request } from '@/api/client'
 type Row = Record<string, string | number | null>
 
 const ENDPOINT = '/api/shift'
-const columns = ["记录编号", "入井人员", "所属班组", "入井时间", "升井时间", "携带设备", "出勤区域", "入井状态"]
+const columns = ["记录编号", "入井人员", "所属班组", "入井时间", "升井时间", "携带设备", "出勤区域", "入井状态", "持证校验"]
 const actions = ["登记入井", "登记升井", "超时联系"]
 const statuses = ["入井中", "已升井", "超时未升", "已联系"]
 const stats = [{"label": "入井中人数", "value": 0}, {"label": "已升井人数", "value": 0}, {"label": "超时人数", "value": 0}]
@@ -99,10 +99,11 @@ async function runAction(action: string, row: Row) {
   try {
     const response = await request(`${ENDPOINT}/${row.id}/actions`, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ values: { action } }),
     })
-    if (!response.ok) {
-      throw new Error('入井管理动作未生效，请稍后重试')
+    const payload = await response.json()
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message ?? payload.detail ?? '入井管理动作未生效，请稍后重试')
     }
     await reload()
   } catch (error) {
